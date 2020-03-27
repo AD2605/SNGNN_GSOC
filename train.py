@@ -6,21 +6,22 @@ import dgl
 import pickle
 import torch.nn.functional as F
 sys.path.append('models')
-from gcn import GCN
-from gat import GAT
-from rgcn import RGCN
-from pg_gcn import PGCN
-from pg_ggn import GGN
-from pg_rgcn import PRGCN
-from pg_gat import PGAT
-from pg_rgcn_gat import PRGAT
+from models.gcn import GCN
+from models.gat import GAT
+from models.rgcn import RGCN
+from models.pg_gcn import PGCN
+from models.pg_ggn import GGN
+from models.pg_rgcn import PRGCN
+from models.pg_gat import PGAT
+from models.pg_rgcn_gat import PRGAT
 from socnav import SocNavDataset
 from torch.utils.data import DataLoader
+from models.custom_net import net as Custom_Net
 # from sklearn.metrics import f1_score
 # from sklearn.metrics import r2_score
-from sklearn.metrics import mean_absolute_error
 from sklearn.metrics import mean_squared_error
 from torch_geometric.data import Data
+
 
 def describe_model(model):
     # Print model's state_dict
@@ -40,14 +41,15 @@ def collate(sample):
 def evaluate(feats, model, subgraph, labels, loss_fcn, fw, net_class):
     with torch.no_grad():
         model.eval()
-        if fw == 'dgl' :
+        if fw == 'dgl':
             model.g = subgraph
             for layer in model.layers:
                 layer.g = subgraph
             output = model(feats.float())
         else:
-            if net_class in [PRGCN,PRGAT]:
-                data = Data(x=feats.float(), edge_index=torch.stack(subgraph.edges()).to(feats.device), edge_type=subgraph.edata['rel_type'].squeeze().to(feats.device))
+            if net_class in [PRGCN, PRGAT]:
+                data = Data(x=feats.float(), edge_index=torch.stack(subgraph.edges()).to(feats.device),
+                            edge_type=subgraph.edata['rel_type'].squeeze().to(feats.device))
             else:
                 data = Data(x=feats.float(), edge_index=torch.stack(subgraph.edges()).to(feats.device))
             output = model(data)
@@ -64,6 +66,7 @@ def getMaskForBatch(subgraph):
         indexes.append(future_index)
         future_index += g.number_of_nodes()
     return indexes
+
 
 def flattenList(input_data):
     def flattenList_rec(input_data):
@@ -86,13 +89,13 @@ def flattenList(input_data):
         return [ret]
     return ret
 
+
 # MAIN
 
 
 def main(training_file, dev_file, test_file, epochs=None, patience=None, num_heads=None, num_out_heads=None,
          num_layers=None, num_hidden=None, residual=None, in_drop=None, attn_drop=None, lr=None, weight_decay=None,
          alpha=None, batch_size=None, graph_type=None, net=None, freeze=None, cuda=None, fw=None):
-
     # number of training epochs
     if epochs is None:
         epochs = 400
@@ -104,14 +107,14 @@ def main(training_file, dev_file, test_file, epochs=None, patience=None, num_hea
 
     # number of hidden attention heads
     if num_heads is None:
-        num_heads_ch = [ 4, 5, 6, 7]
+        num_heads_ch = [4, 5, 6, 7]
     else:
         num_heads_ch = flattenList(num_heads)
     print('NUM HEADS', num_heads_ch)
 
     # number of output attention heads
     if num_out_heads is None:
-        num_out_heads_ch = [ 4, 5, 6, 7]
+        num_out_heads_ch = [4, 5, 6, 7]
     else:
         num_out_heads_ch = flattenList(num_out_heads)
     print('NUM OUT HEADS', num_out_heads_ch)
@@ -148,13 +151,13 @@ def main(training_file, dev_file, test_file, epochs=None, patience=None, num_hea
     print('ATTENTION DROP', attn_drop_ch)
     # learning rate
     if lr is None:
-        lr_ch = [0.0000005,  0.0000015,  0.00001, 0.00005, 0.0001]
+        lr_ch = [0.0000005, 0.0000015, 0.00001, 0.00005, 0.0001]
     else:
         lr_ch = flattenList(lr)
     print('LEARNING RATE', lr_ch)
     # weight decay
     if weight_decay is None:
-        weight_decay_ch  = [0.0001, 0.001, 0.005]
+        weight_decay_ch = [0.0001, 0.001, 0.005]
     else:
         weight_decay_ch = flattenList(weight_decay)
     print('WEIGHT DECAY', weight_decay_ch)
@@ -172,7 +175,7 @@ def main(training_file, dev_file, test_file, epochs=None, patience=None, num_hea
     print('BATCH SIZE', batch_size_ch)
     # net type
     if net is None:
-        net_ch = [ GCN, GAT, RGCN, PGCN, PRGCN, GGN, PGAT ]
+        net_ch = [GCN, GAT, RGCN, PGCN, PRGCN, GGN, PGAT, Custom_Net]
     else:
         net_ch_raw = flattenList(net)
         net_ch = []
@@ -196,19 +199,21 @@ def main(training_file, dev_file, test_file, epochs=None, patience=None, num_hea
                 net_ch.append(GGN)
             elif ch.lower() == 'rgat':
                 net_ch.append(PRGAT)
+            elif ch.lower() == 'custom_net':
+                net_ch.append(Custom_Net)
             else:
                 print('Network type {} is not recognised.'.format(ch))
-                sys.exit(1)
+                exit(1)
     print('NET TYPE', net_ch)
     # graph type
-    if net_ch in [GCN, GAT, PGCN, GGN, PGAT ]:
+    if net_ch in [GCN, GAT, PGCN, GGN, PGAT, Custom_Net]:
         if graph_type is None:
             graph_type_ch = ['raw', '1', '2', '3', '4', 'relational']
         else:
             graph_type_ch = flattenList(graph_type)
     else:
         if graph_type is None:
-            graph_type_ch = [ 'relational']
+            graph_type_ch = ['relational']
         else:
             graph_type_ch = flattenList(graph_type)
 
@@ -231,26 +236,26 @@ def main(training_file, dev_file, test_file, epochs=None, patience=None, num_hea
         fw = ['dgl', 'pg']
 
     # define loss function
-    # loss_fcn = torch.nn.BCEWithLogitsLoss()
-    loss_fcn = torch.nn.MSELoss()
+    loss_fcn = torch.nn.BCEWithLogitsLoss()
+    #loss_fcn = torch.nn.MSELoss()
 
     for trial in range(10):
         trial_s = str(trial).zfill(6)
-        num_heads     = random.choice(num_heads_ch)
+        num_heads = random.choice(num_heads_ch)
         num_out_heads = random.choice(num_out_heads_ch)
-        num_layers    = random.choice(num_layers_ch)
-        num_hidden    = random.choice(num_hidden_ch)
-        residual      = random.choice(residual_ch)
-        in_drop       = random.choice(in_drop_ch)
-        attn_drop     = random.choice(attn_drop_ch)
-        lr            = random.choice(lr_ch)
-        weight_decay  = random.choice(weight_decay_ch)
-        alpha         = random.choice(alpha_ch)
-        batch_size    = random.choice(batch_size_ch)
-        graph_type    = random.choice(graph_type_ch)
-        net_class     = random.choice(net_ch)
-        freeze        = random.choice(freeze_ch)
-        fw            = random.choice(fw)
+        num_layers = random.choice(num_layers_ch)
+        num_hidden = random.choice(num_hidden_ch)
+        residual = random.choice(residual_ch)
+        in_drop = random.choice(in_drop_ch)
+        attn_drop = random.choice(attn_drop_ch)
+        lr = random.choice(lr_ch)
+        weight_decay = random.choice(weight_decay_ch)
+        alpha = random.choice(alpha_ch)
+        batch_size = random.choice(batch_size_ch)
+        graph_type = random.choice(graph_type_ch)
+        net_class = random.choice(net_ch)
+        freeze = random.choice(freeze_ch)
+        fw = random.choice(fw)
         if freeze == False:
             freeze = 0
         else:
@@ -261,25 +266,25 @@ def main(training_file, dev_file, test_file, epochs=None, patience=None, num_hea
             elif graph_type == 'relational':
                 freeze = 5
             else:
-                sys.exit(1)
+                exit(1)
 
         print('=========================')
-        print('TRIAL',        trial_s)
-        print('HEADS',        num_heads)
-        print('OUT_HEADS',    num_out_heads)
-        print('LAYERS',       num_layers)
-        print('HIDDEN',       num_hidden)
-        print('RESIDUAL',     residual)
-        print('inDROP',       in_drop)
-        print('atDROP',       attn_drop)
-        print('LR',           lr)
-        print('DECAY',        weight_decay)
-        print('ALPHA',        alpha)
-        print('BATCH',        batch_size)
-        print('GRAPH_ALT',    graph_type)
+        print('TRIAL', trial_s)
+        print('HEADS', num_heads)
+        print('OUT_HEADS', num_out_heads)
+        print('LAYERS', num_layers)
+        print('HIDDEN', num_hidden)
+        print('RESIDUAL', residual)
+        print('inDROP', in_drop)
+        print('atDROP', attn_drop)
+        print('LR', lr)
+        print('DECAY', weight_decay)
+        print('ALPHA', alpha)
+        print('BATCH', batch_size)
+        print('GRAPH_ALT', graph_type)
         print('ARCHITECTURE', net_class)
-        print('FREEZE',       freeze)
-        print('FRAMEWORK',       fw)
+        print('FREEZE', freeze)
+        print('FRAMEWORK', fw)
         print('=========================')
 
         # create the dataset
@@ -288,7 +293,7 @@ def main(training_file, dev_file, test_file, epochs=None, patience=None, num_hea
         print('Loading dev set...')
         valid_dataset = SocNavDataset(dev_file, mode='valid', alt=graph_type)
         print('Loading test set...')
-        test_dataset  = SocNavDataset(test_file, mode='test', alt=graph_type)
+        test_dataset = SocNavDataset(test_file, mode='test', alt=graph_type)
         print('Done loading files')
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, collate_fn=collate)
         valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, collate_fn=collate)
@@ -303,103 +308,111 @@ def main(training_file, dev_file, test_file, epochs=None, patience=None, num_hea
         print('Number of features: {}'.format(num_feats))
         g = train_dataset.graph
         heads = ([num_heads] * num_layers) + [num_out_heads]
+
         # define the model
 
-
-        if fw == 'dgl' :
+        if fw == 'dgl':
             if net_class in [GCN]:
                 model = GCN(g,
-                        num_feats,
-                        num_hidden,
-                        n_classes,
-                        num_layers,
-                        F.elu,
-                        in_drop)
+                            num_feats,
+                            num_hidden,
+                            n_classes,
+                            num_layers,
+                            F.elu,
+                            in_drop)
             elif net_class in [GAT]:
                 model = net_class(g,
-                              num_layers,
-                              num_feats,
-                              num_hidden,
-                              n_classes,
-                              heads,
-                              F.elu,
-                              in_drop,
-                              attn_drop,
-                              alpha,
-                              residual,
-                              freeze=freeze
-                              )
+                                  num_layers,
+                                  num_feats,
+                                  num_hidden,
+                                  n_classes,
+                                  heads,
+                                  F.elu,
+                                  in_drop,
+                                  attn_drop,
+                                  alpha,
+                                  residual,
+                                  freeze=freeze
+                                  )
             else:
-            # def __init__(self, g, in_dim, h_dim, out_dim, num_rels, num_hidden_layers=1):
+                # def __init__(self, g, in_dim, h_dim, out_dim, num_rels, num_hidden_layers=1):
                 model = RGCN(g,
-                         in_dim=num_feats,
-                         h_dim=num_hidden,
-                         out_dim=n_classes,
-                         num_rels=num_rels,
-                         feat_drop=in_drop,
-                         num_hidden_layers=num_layers,
-                         freeze=freeze)
+                             in_dim=num_feats,
+                             h_dim=num_hidden,
+                             out_dim=n_classes,
+                             num_rels=num_rels,
+                             feat_drop=in_drop,
+                             num_hidden_layers=num_layers,
+                             freeze=freeze)
         else:
 
-                if net_class in [PGCN]:
-                    model = PGCN(num_feats,
-                                n_classes,
-                                num_hidden,
-                                num_layers,
-                                in_drop,
-                                F.relu,
-                                improved=True,#Compute A-hat as A + 2I
-                                bias=True)
+            if net_class in [PGCN]:
+                model = PGCN(num_feats,
+                             n_classes,
+                             num_hidden,
+                             num_layers,
+                             in_drop,
+                             F.relu,
+                             improved=True,  # Compute A-hat as A + 2I
+                             bias=True)
 
-                elif net_class in [PRGCN]:
-                    model = PRGCN(num_feats,
-                                n_classes,
-                                num_rels,
-                                num_rels, #num_rels?   # TODO: Add variable
-                                num_hidden,
-                                num_layers,
-                                in_drop,
-                                F.relu,
-                                bias=True
-                                )
-                elif net_class in [PGAT]:
-                    model = PGAT(num_feats,
-                                n_classes,
-                                num_heads,
-                                in_drop,
-                                num_hidden,
-                                num_layers,
-                                F.relu,
-                                concat=True,
-                                neg_slope=alpha,
-                                bias=True)
-                elif net_class in [PRGAT]:
-                    model  = PRGAT(num_feats,
-                                n_classes,
-                                num_heads,
-                                num_rels,
-                                num_rels, #num_rels?   # TODO: Add variable
-                                num_hidden,
-                                num_layers,
-                                num_layers,
-                                in_drop,
-                                F.relu,
-                                alpha,
-                                bias=True
-                                )
-                else:
-                    model = GGN(num_feats,
-                                num_layers,
-                                aggr='mean',
-                                bias=True)
-        #Describe the model
-        #describe_model(model)
+            elif net_class in [PRGCN]:
+                model = PRGCN(num_feats,
+                              n_classes,
+                              num_rels,
+                              num_rels,  # num_rels?   # TODO: Add variable
+                              num_hidden,
+                              num_layers,
+                              in_drop,
+                              F.relu,
+                              bias=True
+                              )
+            elif net_class in [PGAT]:
+                model = PGAT(num_feats,
+                             n_classes,
+                             num_heads,
+                             in_drop,
+                             num_hidden,
+                             num_layers,
+                             F.relu,
+                             concat=True,
+                             neg_slope=alpha,
+                             bias=True)
+            elif net_class in [PRGAT]:
+                model = PRGAT(num_feats,
+                              n_classes,
+                              num_heads,
+                              num_rels,
+                              num_rels,  # num_rels?   # TODO: Add variable
+                              num_hidden,
+                              num_layers,
+                              num_layers,
+                              in_drop,
+                              F.relu,
+                              alpha,
+                              bias=True
+                              )
+            elif net_class in [Custom_Net]:
+                model = Custom_Net(
+                    features= num_feats,
+                    hidden  = num_layers,
+                    out_features= num_hidden,
+                    classes= n_classes
+                )
+
+            else:
+                model = GGN(num_feats,
+                            num_layers,
+                            aggr='mean',
+                            bias=True)
+        # Describe the model
+        # describe_model(model)
 
         # define the optimizer
         optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
         # for name, param in model.named_parameters():
-            # if param.requires_grad:
-            # print(name, param.data.shape)
+        # if param.requires_grad:
+        # print(name, param.data.shape)
         model = model.to(device)
 
         for epoch in range(epochs):
@@ -411,7 +424,7 @@ def main(training_file, dev_file, test_file, epochs=None, patience=None, num_hea
                 subgraph.set_e_initializer(dgl.init.zero_initializer)
                 feats = feats.to(device)
                 labels = labels.to(device)
-                if fw == 'dgl' :
+                if fw == 'dgl':
                     model.g = subgraph
                     for layer in model.layers:
                         layer.g = subgraph
@@ -420,7 +433,8 @@ def main(training_file, dev_file, test_file, epochs=None, patience=None, num_hea
                     if net_class in [PGCN, PGAT, GGN]:
                         data = Data(x=feats.float(), edge_index=torch.stack(subgraph.edges()).to(device))
                     else:
-                        data = Data(x=feats.float(), edge_index=torch.stack(subgraph.edges()).to(device), edge_type=subgraph.edata['rel_type'].squeeze().to(device))
+                        data = Data(x=feats.float(), edge_index=torch.stack(subgraph.edges()).to(device),
+                                    edge_type=subgraph.edata['rel_type'].squeeze().to(device))
                     logits = model(data)
                 loss = loss_fcn(logits[getMaskForBatch(subgraph)], labels.float())
                 optimizer.zero_grad()
@@ -430,7 +444,6 @@ def main(training_file, dev_file, test_file, epochs=None, patience=None, num_hea
                 b = list(model.parameters())[0].clone()
                 not_learning = torch.equal(a.data, b.data)
                 if not_learning:
-                    import sys
                     print('Not learning')
                     # sys.exit(1)
                 else:
@@ -463,15 +476,17 @@ def main(training_file, dev_file, test_file, epochs=None, patience=None, num_hea
                     best_loss = mean_val_loss
                     # Save the model
                     # print('Writing to', trial_s)
-                    torch.save(model.state_dict(), fw + str(net) + '.tch') #   3       4           5          6          7         8      9      10       11         12      13       14        15
-                    params = [ val_loss, graph_type, str(type(net_class)), g, num_layers, num_feats, num_hidden, n_classes, heads, F.elu, in_drop, attn_drop, alpha, residual, num_rels, freeze ]
-                    pickle.dump( params, open(fw + str(net) +'.prms', 'wb') )
+                    torch.save(model.state_dict(), fw + str(
+                        net) + '.tch')
+                    params = [val_loss, graph_type, str(type(net_class)), g, num_layers, num_feats, num_hidden,
+                              n_classes, heads, F.elu, in_drop, attn_drop, alpha, residual, num_rels, freeze]
+                    pickle.dump(params, open(fw + str(net) + '.prms', 'wb'))
                     cur_step = 0
                 else:
                     cur_step += 1
                     if cur_step >= patience:
                         break
-        torch.save(model,'gattrial.pth')
+        torch.save(model, 'gattrial.pth')
         test_score_list = []
         for batch, test_data in enumerate(test_dataloader):
             subgraph, feats, labels = test_data
@@ -499,26 +514,26 @@ if __name__ == '__main__':
         #      graph_type='2',
         #      net='gat',
         #      cuda=False)
-        #main('socnav_training_small.json', 'socnav_dev_small.json', 'socnav_test_small.json',
+        # main('socnav_training_small.json', 'socnav_dev_small.json', 'socnav_test_small.json',
         main('socnav_training_small.json', 'socnav_dev_small.json', 'socnav_test_small.json',
-           graph_type='relational',
-           net='gat',
-           epochs=10,
-           patience=11,
-           batch_size= [ 699 ],
-           num_hidden = [ 40 ],
-           num_heads = [ 3 ],
-           num_out_heads = [ 7 ],
-           residual=False,
-           lr = [0.0005], # ,  0.00001, 0.000015
-           weight_decay= 0.00001,
-           num_layers = [1],
-           in_drop = 0.0,
-           alpha = 0.1,
-           attn_drop = 0.0,
-           freeze=True,
-           cuda=False,
-           fw='pg')
+             graph_type='relational',
+             net='gat',
+             epochs=10,
+             patience=11,
+             batch_size=[699],
+             num_hidden=[40],
+             num_heads=[3],
+             num_out_heads=[7],
+             residual=False,
+             lr=[0.0005],  # ,  0.00001, 0.000015
+             weight_decay=0.00001,
+             num_layers=[1],
+             in_drop=0.0,
+             alpha=0.1,
+             attn_drop=0.0,
+             freeze=True,
+             cuda=True,
+             fw='pg')
     elif len(sys.argv) == 4:
         main(sys.argv[1], sys.argv[2], sys.argv[3])
     else:
